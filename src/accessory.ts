@@ -2,7 +2,7 @@ import {CharacteristicValue, Formats, PlatformAccessory, Service} from 'homebrid
 
 import {BlaubergVentoPlatform} from './platform';
 import {VentoExpertClient} from './client';
-import {SpeedNumber, UnitOnOff} from './packet';
+import {SpeedNumber, UnitOnOff, VentilationMode} from './packet';
 import {Device} from './device';
 
 export class VentoExpertAccessory {
@@ -37,6 +37,9 @@ export class VentoExpertAccessory {
         format: Formats.UINT8,
       });
 
+    this.service.getCharacteristic(this.platform.Characteristic.SwingMode)
+      .onSet((value) => this.setMode(value ? VentilationMode.HEAT_RECOVERY : VentilationMode.VENTILATION));
+
     this.service.getCharacteristic(this.platform.Characteristic.FilterLifeLevel)
       .setProps({
         minValue: 0,
@@ -60,8 +63,9 @@ export class VentoExpertAccessory {
     return this.client.getStatus()
       .then(status => {
         this.platform.log.debug('[%s] Status:', this.device.deviceId, status);
-        this.service.updateCharacteristic(this.platform.Characteristic.RotationSpeed, status.speed);
         this.service.updateCharacteristic(this.platform.Characteristic.FilterLifeLevel, status.filter.life);
+        this.service.updateCharacteristic(this.platform.Characteristic.RotationSpeed, status.speed);
+        this.service.updateCharacteristic(this.platform.Characteristic.SwingMode, status.ventilationMode === VentilationMode.HEAT_RECOVERY);
         this.service.updateCharacteristic(this.platform.Characteristic.FilterChangeIndication, status.filter.replace);
         return status.active;
       })
@@ -82,6 +86,13 @@ export class VentoExpertAccessory {
         .then(speed => this.platform.log.debug('[%s] Speed changed:', this.device.deviceId, speed))
         .catch(this.handleError.bind(this));
     }
+  }
+
+  async setMode(value: CharacteristicValue) {
+    this.platform.log.debug('[%s] Change mode ->', this.device.deviceId, value);
+    return this.client.changeMode(<VentilationMode>value)
+      .then(value => this.platform.log.debug('[%s] Mode changed:', this.device.deviceId, value))
+      .catch(this.handleError.bind(this));
   }
 
   private handleError(error: Error): Promise<CharacteristicValue> {
